@@ -7,12 +7,38 @@ interface Message {
   content: string;
 }
 
-// Welcome messages - rotates randomly
 const WELCOME_MESSAGES = [
   "Welcome to Xumiiro. We represent 0010×0010 by appointment only.\n\nAre you here to explore a viewing, acquisition, curatorial advisory, or partnership?",
   "Welcome. Xumiiro is a private gallery presenting 0010×0010.\n\nTell me what brings you here—collecting, installation, or collaboration—and I'll guide you to the right path.",
-  "Hello. This is the Xumiiro concierge.\n\nHow may I assist you today? Whether you're exploring the work for the first time or considering an acquisition, I'm here to help."
 ];
+
+// Function to render text with clickable links
+function renderMessageWithLinks(text: string) {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  
+  return parts.map((part, index) => {
+    if (part.match(urlRegex)) {
+      // Remove trailing punctuation from URL
+      const cleanUrl = part.replace(/[.,;:!?]$/, '');
+      const trailing = part.slice(cleanUrl.length);
+      return (
+        <span key={index}>
+          <a 
+            href={cleanUrl} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="message-link"
+          >
+            {cleanUrl}
+          </a>
+          {trailing}
+        </span>
+      );
+    }
+    return <span key={index}>{part}</span>;
+  });
+}
 
 export default function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
@@ -26,7 +52,6 @@ export default function ChatWidget() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Show welcome message when chat opens
   useEffect(() => {
     if (isOpen && !hasShownWelcome && messages.length === 0) {
       const randomWelcome = WELCOME_MESSAGES[Math.floor(Math.random() * WELCOME_MESSAGES.length)];
@@ -220,10 +245,18 @@ export default function ChatWidget() {
           padding-right: 45px;
         }
         
-        .message a, .message-link {
-          color: #888;
+        .message-link {
+          color: #9a9a9a;
           text-decoration: underline;
-          text-underline-offset: 2px;
+          text-underline-offset: 3px;
+          text-decoration-color: #4a4a4a;
+          transition: all 0.2s ease;
+          cursor: pointer;
+        }
+        
+        .message-link:hover {
+          color: #b0b0b0;
+          text-decoration-color: #6a6a6a;
         }
         
         .typing {
@@ -296,7 +329,7 @@ export default function ChatWidget() {
           <div className="messages">
             {messages.map((msg, i) => (
               <div key={i} className={`message ${msg.role}`}>
-                {msg.content}
+                {renderMessageWithLinks(msg.content)}
               </div>
             ))}
 
