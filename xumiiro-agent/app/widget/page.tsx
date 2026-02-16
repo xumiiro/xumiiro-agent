@@ -7,19 +7,18 @@ interface Message {
   content: string;
 }
 
-const WELCOME_MESSAGES = [
-  "Welcome to Xumiiro. We represent 0010×0010 by appointment only.\n\nAre you here to explore a viewing, acquisition, curatorial advisory, or partnership?",
-  "Welcome. Xumiiro is a private gallery presenting 0010×0010.\n\nTell me what brings you here—collecting, installation, or collaboration—and I'll guide you to the right path.",
-];
+const WELCOME_MESSAGE = `Xumiiro is a private gallery devoted to immersive audio-visual experiences. We represent visionary artists who transform space, sound, and light into transcendent moments.
 
-// Function to render text with clickable links
+Our gallery is closed to the public. The works of 0010×0010 can only be experienced through exclusive private viewings in Beverly Hills or Bangkok.
+
+How may I assist you today?`;
+
 function renderMessageWithLinks(text: string) {
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const parts = text.split(urlRegex);
   
   return parts.map((part, index) => {
     if (part.match(urlRegex)) {
-      // Remove trailing punctuation from URL
       const cleanUrl = part.replace(/[.,;:!?]$/, '');
       const trailing = part.slice(cleanUrl.length);
       return (
@@ -54,8 +53,7 @@ export default function ChatWidget() {
 
   useEffect(() => {
     if (isOpen && !hasShownWelcome && messages.length === 0) {
-      const randomWelcome = WELCOME_MESSAGES[Math.floor(Math.random() * WELCOME_MESSAGES.length)];
-      setMessages([{ role: 'assistant', content: randomWelcome }]);
+      setMessages([{ role: 'assistant', content: WELCOME_MESSAGE }]);
       setHasShownWelcome(true);
     }
   }, [isOpen, hasShownWelcome, messages.length]);
