@@ -14,7 +14,7 @@ Our gallery is closed to the public. The works of 0010×0010 can only be experie
 How may I assist you today?`;
 
 function renderMessageWithLinks(text: string) {
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const urlRegex = /(https?:\/\/[^\s]+|(?:www\.)?xumiiro\.com[^\s]*)/g;
   const parts = text.split(urlRegex);
   
   return parts.map((part, index) => {
@@ -24,7 +24,7 @@ function renderMessageWithLinks(text: string) {
       return (
         <span key={index}>
           <a 
-            href={cleanUrl} 
+            href={cleanUrl.startsWith('http') ? cleanUrl : `https://${cleanUrl}`} 
             target="_blank" 
             rel="noopener noreferrer"
             className="message-link"
