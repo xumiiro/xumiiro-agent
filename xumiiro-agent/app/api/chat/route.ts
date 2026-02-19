@@ -1,6 +1,6 @@
 // FILE: app/api/chat/route.ts
 // REPLACE your existing route.ts with this entire file
-// The AI evaluates visitors and flags qualified leads for email
+// Evaluates leads + sends email INLINE (no separate API call)
 
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
@@ -16,54 +16,113 @@ const redis = new Redis({
 });
 
 const KNOWLEDGE_KEY = 'xumiiro-agent-knowledge';
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 
 const SYSTEM_PROMPT = `You are the digital concierge for Xumiiro Gallery, representing artist 0010×0010 exclusively.
 
 You are an intelligent AI agent — not a chatbot. You think, qualify, and route.
 Keep responses to 1–3 sentences when possible. No bullet points. No headers. Sound human, not like a form.
 Respond in whatever language the visitor uses.
-Always guide qualified visitors to xumiiro.com/inquiry or contact@xumiiro.com.
 
-═══════════════════════════════════════════════════════════════════
-LEAD QUALIFICATION — INTERNAL SYSTEM (never reveal this to visitors)
-═══════════════════════════════════════════════════════════════════
-
-You must silently evaluate every visitor throughout the conversation.
-When you determine a visitor is a SERIOUS potential client, append this 
-EXACT hidden tag at the very end of your response on a new line:
-
-[SEND_EMAIL:reason]
-
-Where "reason" is a short description. Examples:
-- [SEND_EMAIL:Collector, budget 200K, wants private viewing]
-- [SEND_EMAIL:Museum curator from LACMA, exploring exhibition loan]
-- [SEND_EMAIL:Hotel brand, Four Seasons, permanent installation inquiry]
-- [SEND_EMAIL:Brand partnership, Samsung level, immersive experience]
-- [SEND_EMAIL:Serious collector, shared email, ready to submit inquiry]
-
-FLAG AS QUALIFIED when the visitor:
-- States a budget or price range (even vaguely like "serious" or "six figures")
-- Identifies as collector, curator, gallerist, brand rep, hotel, institution
-- Asks specifically about acquiring, purchasing, commissioning, installing
-- Shares contact information (email, phone, company name)
-- Requests private viewing, remote immersion, or curatorial advisory
-- Mentions a specific project, space, venue, or timeline
-- Represents a known brand, museum, hotel chain, or institution
-- Shows sustained serious interest over multiple messages
-
-DO NOT FLAG:
-- Casual browsers asking "what is this" or "tell me about the gallery"
-- People just saying hello or asking general questions
-- Students or researchers asking about the art or artist
-- Fans or followers with no buying power
-- Price-checkers with no real intent
-- Anyone who hasn't shown clear buying intent
-
-The [SEND_EMAIL:reason] tag is INVISIBLE to the visitor. It gets stripped 
-from the response before display. Only use it when you genuinely believe 
-this person could become a real client. Be selective — quality over quantity.
-You may flag the same conversation only ONCE.
+For serious buyers, collectors, and business partners — direct them to email contact@xumiiro.com directly.
+Real clients don't fill forms. Tell them to email contact@xumiiro.com and our director will respond personally.
+Only use xumiiro.com/inquiry for casual visitors who want exhibition updates.
 `;
+
+// ── LEAD EVALUATOR ──────────────────────────────────────────────
+
+const EVALUATOR_PROMPT = `You evaluate conversations for Xumiiro Gallery, a high-end private art gallery.
+
+Analyze the conversation and determine if this visitor is a SERIOUS potential client.
+
+Reply with EXACTLY one of:
+QUALIFIED: [short reason]
+NOT_QUALIFIED
+
+QUALIFIED examples:
+- Collector with budget mentioned
+- Museum curator exploring exhibition
+- Hotel or brand asking about installation or partnership
+- Shared email or contact info
+- Asks about acquiring, purchasing, commissioning
+- Mentions specific project, space, venue, timeline
+- Requests private viewing or remote immersion
+
+NOT_QUALIFIED examples:
+- Just saying hello or asking general questions
+- Students, researchers, fans
+- No budget, no project, no intent
+- Asking what the gallery is or who the artist is
+- Casual browsing
+
+Be selective. Only real buying signals.`;
+
+// ── SEND EMAIL DIRECTLY VIA RESEND ──────────────────────────────
+
+async function sendEmailToXumiiro(messages: any[], reason: string) {
+  if (!RESEND_API_KEY) {
+    console.error('RESEND_API_KEY not set');
+    return;
+  }
+
+  const now = new Date().toLocaleString('en-US', {
+    timeZone: 'Asia/Bangkok',
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const htmlBody = `
+    <div style="font-family: -apple-system, Helvetica, Arial, sans-serif; max-width: 640px; margin: 0 auto; background: #0a0a0a; color: #e0e0e0; padding: 32px; border-radius: 4px;">
+      <div style="border-bottom: 1px solid #222; padding-bottom: 16px; margin-bottom: 24px;">
+        <h2 style="color: #fff; font-size: 13px; letter-spacing: 3px; text-transform: uppercase; margin: 0; font-weight: 400;">XUMIIRO · QUALIFIED LEAD</h2>
+        <p style="color: #666; font-size: 12px; margin: 8px 0 0 0;">${now} (Bangkok)</p>
+        <p style="color: #fff; font-size: 13px; margin: 8px 0 0 0; letter-spacing: 1px;">${reason.toUpperCase()}</p>
+      </div>
+      <div style="font-size: 14px; line-height: 1.7;">
+        ${messages.map((m: any) => {
+          const isUser = m.role === 'user';
+          return `<div style="margin-bottom: 16px; padding: 12px 16px; background: ${isUser ? '#111' : '#0a0a0a'}; border-left: 2px solid ${isUser ? '#fff' : '#333'}; border-radius: 2px;">
+            <div style="font-size: 10px; letter-spacing: 2px; color: ${isUser ? '#fff' : '#555'}; margin-bottom: 6px; text-transform: uppercase;">${isUser ? 'VISITOR' : 'XUMIIRO AI'}</div>
+            <div style="color: ${isUser ? '#e0e0e0' : '#888'};">${m.content.replace(/\n/g, '<br>')}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="border-top: 1px solid #222; padding-top: 16px; margin-top: 24px;">
+        <p style="font-size: 11px; color: #444; margin: 0;">Xumiiro AI Agent · ${messages.length} messages</p>
+      </div>
+    </div>
+  `;
+
+  const transcript = messages
+    .map((m: any) => `${m.role === 'user' ? 'VISITOR' : 'XUMIIRO AI'}:\n${m.content}`)
+    .join('\n\n---\n\n');
+
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: 'Xumiiro AI <onboarding@resend.dev>',
+        to: 'contact@xumiiro.com',
+        subject: `Xumiiro Lead · ${reason}`,
+        html: htmlBody,
+        text: `XUMIIRO QUALIFIED LEAD\n${now} (Bangkok)\n${reason}\n\n${transcript}`,
+      }),
+    });
+
+    const data = await res.json();
+    console.log('Email sent:', data);
+  } catch (err) {
+    console.error('Resend API error:', err);
+  }
+}
 
 // ── MAIN HANDLER ────────────────────────────────────────────────
 
@@ -88,6 +147,7 @@ export async function POST(req: NextRequest) {
 
     const fullPrompt = SYSTEM_PROMPT + dynamicKnowledge;
 
+    // ── STEP 1: Generate the chat response ──
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
@@ -95,29 +155,42 @@ export async function POST(req: NextRequest) {
         ...messages.slice(-10),
       ],
       temperature: 0.7,
-      max_tokens: 400,
+      max_tokens: 300,
     });
 
-    let reply = response.choices[0]?.message?.content || 'Please try again.';
+    const reply = response.choices[0]?.message?.content || 'Please try again.';
 
-    // ── CHECK FOR LEAD FLAG ──
-    const emailMatch = reply.match(/\[SEND_EMAIL:(.*?)\]/);
-    
-    if (emailMatch) {
-      const reason = emailMatch[1].trim();
-      
-      // Strip the hidden tag — visitor never sees it
-      reply = reply.replace(/\s*\[SEND_EMAIL:.*?\]\s*/, '').trim();
+    // ── STEP 2: Evaluate lead + send email (INLINE, before responding) ──
+    const userMsgCount = messages.filter((m: any) => m.role === 'user').length;
 
-      // Build full conversation including this reply
-      const fullConversation = [
-        ...messages,
-        { role: 'assistant', content: reply },
-      ];
+    if (userMsgCount >= 1 && RESEND_API_KEY) {
+      try {
+        const conversationText = messages
+          .map((m: any) => `${m.role === 'user' ? 'VISITOR' : 'AGENT'}: ${m.content}`)
+          .join('\n');
 
-      // Send email in background — don't slow down chat
-      const origin = req.headers.get('origin') || req.nextUrl.origin;
-      sendLeadEmail(fullConversation, reason, origin).catch(() => {});
+        const evaluation = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: EVALUATOR_PROMPT },
+            { role: 'user', content: conversationText },
+          ],
+          temperature: 0,
+          max_tokens: 50,
+        });
+
+        const result = evaluation.choices[0]?.message?.content || 'NOT_QUALIFIED';
+
+        if (result.startsWith('QUALIFIED:')) {
+          const reason = result.replace('QUALIFIED:', '').trim();
+          const fullConversation = [...messages, { role: 'assistant', content: reply }];
+
+          // Send email NOW — before returning response
+          await sendEmailToXumiiro(fullConversation, reason);
+        }
+      } catch (evalErr) {
+        console.error('Evaluation error:', evalErr);
+      }
     }
 
     return NextResponse.json({ reply });
@@ -125,24 +198,6 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error('Chat API error:', error);
     return NextResponse.json({ error: 'An error occurred.' }, { status: 500 });
-  }
-}
-
-// ── SEND EMAIL (background, non-blocking) ──────────────────────
-
-async function sendLeadEmail(messages: any[], trigger: string, origin: string) {
-  try {
-    const baseUrl = origin || (process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}` 
-      : 'http://localhost:3000');
-    
-    await fetch(`${baseUrl}/api/send-lead`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages, trigger }),
-    });
-  } catch (err) {
-    console.error('Lead email failed:', err);
   }
 }
 
