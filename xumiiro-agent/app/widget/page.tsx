@@ -292,10 +292,15 @@ export default function ChatWidget() {
 
         @media (max-width: 480px) {
           .panel {
-            width: calc(100vw - 24px);
-            height: calc(100vh - 48px);
-            bottom: 12px;
-            right: 12px;
+            width: 100vw;
+            height: 100vh;
+            height: -webkit-fill-available;
+            bottom: 0;
+            right: 0;
+            left: 0;
+            top: 0;
+            border: none;
+            border-radius: 0;
           }
           .launcher { 
             bottom: 16px; 
@@ -305,6 +310,10 @@ export default function ChatWidget() {
           }
           .message.user { padding-left: 30px; }
           .message.assistant { padding-right: 30px; }
+          .input-area {
+            padding: 18px 22px;
+            padding-bottom: calc(18px + env(safe-area-inset-bottom));
+          }
         }
       `}</style>
 
