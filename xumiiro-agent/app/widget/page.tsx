@@ -7,11 +7,9 @@ interface Message {
   content: string;
 }
 
-const WELCOME_MESSAGE = `Xumiiro is a private gallery devoted to immersive audio-visual experiences. We represent visionary artists who transform space, sound, and light into transcendent moments.
+const WELCOME_MESSAGE = `Xumiiro. Private gallery. Beverly Hills · Bangkok.
 
-Our gallery is closed to the public. The works of 0010×0010 can only be experienced through exclusive private viewings in Beverly Hills or Bangkok.
-
-How may I assist you today?`;
+How may I assist you?`;
 
 function renderMessageWithLinks(text: string) {
   const urlRegex = /(https?:\/\/[^\s]+|(?:www\.)?xumiiro\.com[^\s]*)/g;
